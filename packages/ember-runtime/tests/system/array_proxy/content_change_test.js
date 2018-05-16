@@ -1,7 +1,8 @@
-import { get, set, run, changeProperties } from 'ember-metal';
-import { not } from '../../../computed/computed_macros';
-import ArrayProxy from '../../../system/array_proxy';
-import { A as emberA } from '../../../mixins/array';
+import { run } from '@ember/runloop';
+import { get, set, changeProperties } from 'ember-metal';
+import { not } from '@ember/object/computed';
+import ArrayProxy from '../../../lib/system/array_proxy';
+import { A as emberA } from '../../../lib/mixins/array';
 import { moduleFor, AbstractTestCase } from 'internal-test-helpers';
 
 moduleFor(

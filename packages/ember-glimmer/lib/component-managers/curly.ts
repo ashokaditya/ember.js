@@ -1,3 +1,7 @@
+import { assert, deprecate } from '@ember/debug';
+import { _instrumentStart } from '@ember/instrumentation';
+import { assign } from '@ember/polyfills';
+import { DEBUG } from '@glimmer/env';
 import {
   ComponentCapabilities,
   Option,
@@ -21,12 +25,10 @@ import {
 } from '@glimmer/runtime';
 import { Destroyable, EMPTY_ARRAY } from '@glimmer/util';
 import { privatize as P } from 'container';
-import { assert, deprecate } from 'ember-debug';
-import { DEBUG } from 'ember-env-flags';
 import { ENV } from 'ember-environment';
-import { _instrumentStart, get } from 'ember-metal';
-import { String as StringUtils } from 'ember-runtime';
-import { assign, getOwner, guidFor } from 'ember-utils';
+import { get } from 'ember-metal';
+import { getOwner } from 'ember-owner';
+import { guidFor } from 'ember-utils';
 import { addChildView, OwnedTemplateMeta, setViewElement } from 'ember-views';
 import { BOUNDS, DIRTY_TAG, HAS_BLOCK, IS_DISPATCHING_ATTRS, ROOT_REF } from '../component';
 import Environment from '../environment';
@@ -36,9 +38,9 @@ import { Factory as TemplateFactory, OwnedTemplate } from '../template';
 import {
   AttributeBinding,
   ClassNameBinding,
-  ColonClassNameBindingReference,
   IsVisibleBinding,
   referenceForKey,
+  SimpleClassNameBindingReference,
 } from '../utils/bindings';
 import ComponentStateBucket, { Component } from '../utils/curly-component-state-bucket';
 import { processComponentArgs } from '../utils/process-args';
@@ -155,7 +157,7 @@ export default class CurlyComponentManager
   }
 
   prepareArgs(state: DefinitionState, args: Arguments): Option<PreparedArguments> {
-    const { positionalParams } = state.ComponentClass.class;
+    const { positionalParams } = state.ComponentClass.class!;
 
     // early exits
     if (
@@ -327,15 +329,8 @@ export default class CurlyComponentManager
       IsVisibleBinding.install(element, component, operations);
     }
 
-    if (classRef && classRef.value()) {
-      const ref =
-        classRef.value() === true
-          ? new ColonClassNameBindingReference(
-              classRef,
-              StringUtils.dasherize(classRef['_propertyKey']),
-              null
-            )
-          : classRef;
+    if (classRef) {
+      const ref = new SimpleClassNameBindingReference(classRef, classRef['_propertyKey']);
       operations.setAttribute('class', ref, false, null);
     }
 
@@ -352,8 +347,7 @@ export default class CurlyComponentManager
     }
     operations.setAttribute('class', PrimitiveReference.create('ember-view'), false, null);
 
-    const ariaRole = get(component, 'ariaRole');
-    if (ariaRole) {
+    if ('ariaRole' in component) {
       operations.setAttribute('role', referenceForKey(component, 'ariaRole'), false, null);
     }
 

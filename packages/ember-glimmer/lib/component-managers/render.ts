@@ -2,9 +2,9 @@ import { ComponentCapabilities } from '@glimmer/interfaces';
 import { CONSTANT_TAG, Tag, VersionedPathReference } from '@glimmer/reference';
 import { Arguments, ComponentDefinition, Invocation, WithStaticLayout } from '@glimmer/runtime';
 
-import { DEBUG } from 'ember-env-flags';
+import { DEBUG } from '@glimmer/env';
+import { Owner } from 'ember-owner';
 import { generateController, generateControllerFactory } from 'ember-routing';
-import { Owner } from 'ember-utils';
 import { OwnedTemplateMeta } from 'ember-views';
 import Environment from '../environment';
 import { DynamicScope } from '../renderer';

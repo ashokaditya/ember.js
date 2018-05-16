@@ -1,23 +1,24 @@
 import { moduleFor, AutobootApplicationTestCase, isIE11 } from 'internal-test-helpers';
 
 import { Route } from 'ember-routing';
-import { Controller, RSVP } from 'ember-runtime';
-import { later } from 'ember-metal';
+import Controller from '@ember/controller';
+import { RSVP } from 'ember-runtime';
+import { later } from '@ember/runloop';
 import { Component } from 'ember-glimmer';
 import { jQueryDisabled, jQuery } from 'ember-views';
 
-import Test from '../test';
-import setupForTesting from '../setup_for_testing';
+import Test from '../lib/test';
+import setupForTesting from '../lib/setup_for_testing';
 
 import {
   pendingRequests,
   incrementPendingRequests,
   decrementPendingRequests,
   clearPendingRequests,
-} from '../test/pending_requests';
-import { setAdapter, getAdapter } from '../test/adapter';
-import { registerWaiter, unregisterWaiter } from '../test/waiters';
-import { getDebugFunction, setDebugFunction } from 'ember-debug';
+} from '../lib/test/pending_requests';
+import { setAdapter, getAdapter } from '../lib/test/adapter';
+import { registerWaiter, unregisterWaiter } from '../lib/test/waiters';
+import { getDebugFunction, setDebugFunction } from '@ember/debug';
 
 var originalInfo = getDebugFunction('info');
 var noop = function() {};
@@ -183,10 +184,14 @@ if (!jQueryDisabled) {
           injected++;
         });
 
-        this.runTask(() => {
-          this.createApplication();
-          this.application.setupForTesting();
-        });
+        // bind(this) so Babel doesn't leak _this
+        // into the context onInjectHelpers.
+        this.runTask(
+          function() {
+            this.createApplication();
+            this.application.setupForTesting();
+          }.bind(this)
+        );
 
         assert.equal(injected, 0, 'onInjectHelpers are not called before injectTestHelpers');
 
@@ -911,6 +916,7 @@ if (!jQueryDisabled) {
     'ember-testing: debugging helpers',
     class extends HelpersApplicationTestCase {
       afterEach() {
+        super.afterEach();
         setDebugFunction('info', originalInfo);
       }
 
@@ -1039,6 +1045,7 @@ if (!jQueryDisabled) {
       }
 
       [`@test pendingRequests is maintained for ajaxSend and ajaxComplete events`](assert) {
+        let done = assert.async();
         assert.equal(pendingRequests(), 0);
 
         let xhr = { some: 'xhr' };
@@ -1047,7 +1054,10 @@ if (!jQueryDisabled) {
         assert.equal(pendingRequests(), 1, 'Ember.Test.pendingRequests was incremented');
 
         this.trigger('ajaxComplete', xhr);
-        assert.equal(pendingRequests(), 0, 'Ember.Test.pendingRequests was decremented');
+        setTimeout(function() {
+          assert.equal(pendingRequests(), 0, 'Ember.Test.pendingRequests was decremented');
+          done();
+        }, 0);
       }
 
       [`@test pendingRequests is ignores ajaxComplete events from past setupForTesting calls`](

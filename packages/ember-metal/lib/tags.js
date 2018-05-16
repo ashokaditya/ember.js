@@ -1,8 +1,8 @@
 import { CONSTANT_TAG, UpdatableTag, DirtyableTag, combine } from '@glimmer/reference';
 import { isProxy } from 'ember-utils';
-import { EMBER_METAL_TRACKED_PROPERTIES } from 'ember/features';
-import { meta as metaFor } from './meta';
-import { backburner } from './run_loop';
+import { EMBER_METAL_TRACKED_PROPERTIES } from '@ember/canary-features';
+import { meta as metaFor } from 'ember-meta';
+import { backburner } from '@ember/runloop';
 
 let hasViews = () => false;
 
@@ -13,8 +13,6 @@ export function setHasViews(fn) {
 function makeTag() {
   return DirtyableTag.create();
 }
-
-export const TRACKED_GETTERS = EMBER_METAL_TRACKED_PROPERTIES ? new WeakMap() : undefined;
 
 export function tagForProperty(object, propertyKey, _meta) {
   if (typeof object !== 'object' || object === null) {

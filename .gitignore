@@ -33,13 +33,14 @@ tmp.bpm
 tmp.spade
 tests/source
 node_modules
+yarn-error.log
 bundle/
 *~
 publish_to_bower/
 bower_components/
 npm-debug.log
 .ember-cli
-DEBUG/
+/DEBUG/
 *.tgz
 *.tar.gz
 *.log

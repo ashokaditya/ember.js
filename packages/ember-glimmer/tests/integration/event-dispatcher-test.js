@@ -1,12 +1,11 @@
 import { RenderingTest, moduleFor } from '../utils/test-case';
 import { Component } from '../utils/helpers';
+import { getCurrentRunLoop, run } from '@ember/runloop';
 import {
-  instrumentationSubscribe,
-  instrumentationReset,
-  run,
-  getCurrentRunLoop,
-} from 'ember-metal';
-import { EMBER_IMPROVED_INSTRUMENTATION } from 'ember/features';
+  subscribe as instrumentationSubscribe,
+  reset as instrumentationReset,
+} from '@ember/instrumentation';
+import { EMBER_IMPROVED_INSTRUMENTATION } from '@ember/canary-features';
 
 let canDataTransfer = !!document.createEvent('HTMLEvents').dataTransfer;
 
@@ -35,6 +34,44 @@ moduleFor(
       this.render(`{{x-foo}}`);
 
       this.runTask(() => this.$('#is-done').trigger('change'));
+      assert.ok(receivedEvent, 'change event was triggered');
+      assert.strictEqual(receivedEvent.target, this.$('#is-done')[0]);
+    }
+
+    ['@test case insensitive events'](assert) {
+      let receivedEvent;
+
+      this.registerComponent('x-bar', {
+        ComponentClass: Component.extend({
+          clicked(event) {
+            receivedEvent = event;
+          },
+        }),
+        template: `<button id="is-done" onclick={{action clicked}}>my button</button>`,
+      });
+
+      this.render(`{{x-bar}}`);
+
+      this.runTask(() => this.$('#is-done').trigger('click'));
+      assert.ok(receivedEvent, 'change event was triggered');
+      assert.strictEqual(receivedEvent.target, this.$('#is-done')[0]);
+    }
+
+    ['@test case sensitive events'](assert) {
+      let receivedEvent;
+
+      this.registerComponent('x-bar', {
+        ComponentClass: Component.extend({
+          clicked(event) {
+            receivedEvent = event;
+          },
+        }),
+        template: `<button id="is-done" onClick={{action clicked}}>my button</button>`,
+      });
+
+      this.render(`{{x-bar}}`);
+
+      this.runTask(() => this.$('#is-done').trigger('click'));
       assert.ok(receivedEvent, 'change event was triggered');
       assert.strictEqual(receivedEvent.target, this.$('#is-done')[0]);
     }

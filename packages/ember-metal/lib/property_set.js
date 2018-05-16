@@ -1,19 +1,23 @@
-import { toString } from 'ember-utils';
-import { assert, Error as EmberError } from 'ember-debug';
+import { HAS_NATIVE_PROXY, toString } from 'ember-utils';
+import EmberError from '@ember/error';
+import { DEBUG } from '@glimmer/env';
+import { assert } from '@ember/debug';
 import { getPossibleMandatoryProxyValue, _getPath as getPath } from './property_get';
 import { notifyPropertyChange } from './property_events';
 
 import { isPath } from './path_cache';
-import { isDescriptor, isDescriptorTrap, peekMeta, DESCRIPTOR, descriptorFor } from './meta';
-import { DESCRIPTOR_TRAP, EMBER_METAL_ES5_GETTERS, MANDATORY_SETTER } from 'ember/features';
+import { isDescriptor, peekMeta, descriptorFor } from 'ember-meta';
+
 /**
  @module @ember/object
 */
 /**
   Sets the value of a property on an object, respecting computed properties
-  and notifying observers and other listeners of the change. If the
-  property is not defined but the object implements the `setUnknownProperty`
-  method then that will be invoked as well.
+  and notifying observers and other listeners of the change.
+  If the specified property is not defined on the object and the object
+  implements the `setUnknownProperty` method, then instead of setting the
+  value of the property on the object, its `setUnknownProperty` handler
+  will be invoked with the two parameters `keyName` and `value`.
 
   ```javascript
   import { set } from '@ember/object';
@@ -59,20 +63,19 @@ export function set(obj, keyName, value, tolerant) {
     return setPath(obj, keyName, value, tolerant);
   }
 
-  if (EMBER_METAL_ES5_GETTERS) {
-    let possibleDesc = descriptorFor(obj, keyName);
+  let possibleDesc = descriptorFor(obj, keyName);
 
-    if (possibleDesc !== undefined) {
-      /* computed property */
-      possibleDesc.set(obj, keyName, value);
-      return value;
-    }
+  if (possibleDesc !== undefined) {
+    /* computed property */
+    possibleDesc.set(obj, keyName, value);
+    return value;
   }
 
-  let currentValue = getPossibleMandatoryProxyValue(obj, keyName);
-
-  if (DESCRIPTOR_TRAP && isDescriptorTrap(currentValue)) {
-    currentValue = currentValue[DESCRIPTOR];
+  let currentValue;
+  if (DEBUG && HAS_NATIVE_PROXY) {
+    currentValue = getPossibleMandatoryProxyValue(obj, keyName);
+  } else {
+    currentValue = obj[keyName];
   }
 
   if (isDescriptor(currentValue)) {
@@ -89,7 +92,7 @@ export function set(obj, keyName, value, tolerant) {
   } else {
     let meta = peekMeta(obj);
 
-    if (MANDATORY_SETTER) {
+    if (DEBUG) {
       setWithMandatorySetter(meta, obj, keyName, value);
     } else {
       obj[keyName] = value;
@@ -103,7 +106,7 @@ export function set(obj, keyName, value, tolerant) {
   return value;
 }
 
-if (MANDATORY_SETTER) {
+if (DEBUG) {
   var setWithMandatorySetter = (meta, obj, keyName, value) => {
     if (meta !== undefined && meta.peekWatching(keyName) > 0) {
       makeEnumerable(obj, keyName);

@@ -21,15 +21,16 @@ import {
   arrayContentWillChange,
   arrayContentDidChange,
 } from 'ember-metal';
-import { assert, deprecate } from 'ember-debug';
+import { assert, deprecate } from '@ember/debug';
 import Enumerable from './enumerable';
 import compare from '../compare';
 import { ENV } from 'ember-environment';
 import Observable from '../mixins/observable';
 import Copyable from '../mixins/copyable';
 import copy from '../copy';
-import { Error as EmberError } from 'ember-debug';
+import EmberError from '@ember/error';
 import MutableEnumerable from './mutable_enumerable';
+import { uniqBy } from '../utils';
 
 const EMPTY_ARRAY = Object.freeze([]);
 const EMBER_ARRAY = symbol('EMBER_ARRAY');
@@ -40,8 +41,47 @@ export function isEmberArray(obj) {
 
 function iter(key, value) {
   let valueProvided = arguments.length === 2;
-
   return valueProvided ? item => value === get(item, key) : item => !!get(item, key);
+}
+
+function findIndex(array, predicate, startAt) {
+  let len = array.length;
+  for (let index = startAt; index < len; index++) {
+    let item = objectAt(array, index);
+    if (predicate(item, index, array)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function find(array, callback, target) {
+  let predicate = callback.bind(target);
+  let index = findIndex(array, predicate, 0);
+  return index === -1 ? undefined : objectAt(array, index);
+}
+
+function any(array, callback, target) {
+  let predicate = callback.bind(target);
+  return findIndex(array, predicate, 0) !== -1;
+}
+
+function every(array, callback, target) {
+  let cb = callback.bind(target);
+  let predicate = (item, index, array) => !cb(item, index, array);
+  return findIndex(array, predicate, 0) === -1;
+}
+
+function indexOf(array, val, startAt = 0, withNaNCheck) {
+  let len = array.length;
+
+  if (startAt < 0) {
+    startAt += len;
+  }
+
+  // SameValueZero comparison (NaN !== NaN)
+  let predicate = withNaNCheck && val !== val ? item => item !== item : item => item === val;
+  return findIndex(array, predicate, startAt);
 }
 
 // ..........................................................
@@ -119,7 +159,7 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   objectAt(idx) {
-    if (idx < 0 || idx >= get(this, 'length')) {
+    if (idx < 0 || idx >= this.length) {
       return undefined;
     }
 
@@ -156,11 +196,10 @@ const ArrayMixin = Mixin.create(Enumerable, {
   */
   '[]': computed({
     get() {
-      // eslint-disable-line no-unused-vars
       return this;
     },
     set(key, value) {
-      this.replace(0, get(this, 'length'), value);
+      this.replace(0, this.length, value);
       return this;
     },
   }),
@@ -184,7 +223,7 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   lastObject: computed(function() {
-    return objectAt(this, get(this, 'length') - 1);
+    return objectAt(this, this.length - 1);
   }).readOnly(),
 
   // Add any extra methods to EmberArray that are native to the built-in Array.
@@ -209,7 +248,7 @@ const ArrayMixin = Mixin.create(Enumerable, {
   */
   slice(beginIndex, endIndex) {
     let ret = A();
-    let length = get(this, 'length');
+    let length = this.length;
 
     if (isNone(beginIndex)) {
       beginIndex = 0;
@@ -253,24 +292,9 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @return {Number} index or -1 if not found
     @public
   */
+
   indexOf(object, startAt) {
-    let len = get(this, 'length');
-
-    if (startAt === undefined) {
-      startAt = 0;
-    }
-
-    if (startAt < 0) {
-      startAt += len;
-    }
-
-    for (let idx = startAt; idx < len; idx++) {
-      if (objectAt(this, idx) === object) {
-        return idx;
-      }
-    }
-
-    return -1;
+    return indexOf(this, object, startAt, false);
   },
 
   /**
@@ -297,7 +321,7 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   lastIndexOf(object, startAt) {
-    let len = get(this, 'length');
+    let len = this.length;
 
     if (startAt === undefined || startAt >= len) {
       startAt = len - 1;
@@ -442,9 +466,9 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   forEach(callback, target = null) {
-    assert('forEach expects a function as first argument.', typeof callback === 'function');
+    assert('`forEach` expects a function as first argument.', typeof callback === 'function');
 
-    let length = get(this, 'length');
+    let length = this.length;
 
     for (let index = 0; index < length; index++) {
       let item = this.objectAt(index);
@@ -507,8 +531,8 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @return {Array} The mapped array.
     @public
   */
-  map(callback, target) {
-    assert('map expects a function as first argument.', typeof callback === 'function');
+  map(callback, target = null) {
+    assert('`map` expects a function as first argument.', typeof callback === 'function');
 
     let ret = A();
 
@@ -559,8 +583,8 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @return {Array} A filtered array.
     @public
   */
-  filter(callback, target) {
-    assert('filter expects a function as first argument.', typeof callback === 'function');
+  filter(callback, target = null) {
+    assert('`filter` expects a function as first argument.', typeof callback === 'function');
 
     let ret = A();
 
@@ -600,9 +624,8 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @return {Array} A rejected array.
     @public
   */
-  reject(callback, target) {
-    assert('reject expects a function as first argument.', typeof callback === 'function');
-
+  reject(callback, target = null) {
+    assert('`reject` expects a function as first argument.', typeof callback === 'function');
     return this.filter(function() {
       return !callback.apply(target, arguments);
     });
@@ -620,8 +643,7 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   filterBy() {
-    // eslint-disable-line no-unused-vars
-    return this.filter(iter.apply(this, arguments));
+    return this.filter(iter(...arguments));
   },
 
   /**
@@ -635,12 +657,8 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @return {Array} rejected array
     @public
   */
-  rejectBy(key, value) {
-    let exactValue = item => get(item, key) === value;
-    let hasValue = item => !!get(item, key);
-    let use = arguments.length === 2 ? exactValue : hasValue;
-
-    return this.reject(use);
+  rejectBy() {
+    return this.reject(iter(...arguments));
   },
 
   /**
@@ -672,17 +690,8 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   find(callback, target = null) {
-    assert('find expects a function as first argument.', typeof callback === 'function');
-
-    let length = get(this, 'length');
-
-    for (let index = 0; index < length; index++) {
-      let item = this.objectAt(index);
-
-      if (callback.call(target, item, index, this)) {
-        return item;
-      }
-    }
+    assert('`find` expects a function as first argument.', typeof callback === 'function');
+    return find(this, callback, target);
   },
 
   /**
@@ -699,8 +708,7 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   findBy() {
-    // eslint-disable-line no-unused-vars
-    return this.find(iter.apply(this, arguments));
+    return this.find(iter(...arguments));
   },
 
   /**
@@ -738,10 +746,9 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @return {Boolean}
     @public
   */
-  every(callback, target) {
-    assert('every expects a function as first argument.', typeof callback === 'function');
-
-    return !this.find((x, idx, i) => !callback.call(target, x, idx, i));
+  every(callback, target = null) {
+    assert('`every` expects a function as first argument.', typeof callback === 'function');
+    return every(this, callback, target);
   },
 
   /**
@@ -760,8 +767,7 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   isEvery() {
-    // eslint-disable-line no-unused-vars
-    return this.every(iter.apply(this, arguments));
+    return this.every(iter(...arguments));
   },
 
   /**
@@ -802,19 +808,8 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   any(callback, target = null) {
-    assert('any expects a function as first argument.', typeof callback === 'function');
-
-    let length = get(this, 'length');
-
-    for (let index = 0; index < length; index++) {
-      let item = this.objectAt(index);
-
-      if (callback.call(target, item, index, this)) {
-        return true;
-      }
-    }
-
-    return false;
+    assert('`any` expects a function as first argument.', typeof callback === 'function');
+    return any(this, callback, target);
   },
 
   /**
@@ -830,8 +825,7 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   isAny() {
-    // eslint-disable-line no-unused-vars
-    return this.any(iter.apply(this, arguments));
+    return this.any(iter(...arguments));
   },
 
   /**
@@ -869,7 +863,7 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   reduce(callback, initialValue, reducerProperty) {
-    assert('reduce expects a function as first argument.', typeof callback === 'function');
+    assert('`reduce` expects a function as first argument.', typeof callback === 'function');
 
     let ret = initialValue;
 
@@ -914,11 +908,7 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   toArray() {
-    let ret = A();
-
-    this.forEach((o, idx) => (ret[idx] = o));
-
-    return ret;
+    return this.map(item => item);
   },
 
   /**
@@ -956,32 +946,13 @@ const ArrayMixin = Mixin.create(Enumerable, {
     ```
 
     @method includes
-    @param {Object} obj The object to search for.
+    @param {Object} object The object to search for.
     @param {Number} startAt optional starting location to search, default 0
     @return {Boolean} `true` if object is found in the array.
     @public
   */
-  includes(obj, startAt) {
-    let len = get(this, 'length');
-
-    if (startAt === undefined) {
-      startAt = 0;
-    }
-
-    if (startAt < 0) {
-      startAt += len;
-    }
-
-    for (let idx = startAt; idx < len; idx++) {
-      let currentObj = objectAt(this, idx);
-
-      // SameValueZero comparison (NaN !== NaN)
-      if (obj === currentObj || (obj !== obj && currentObj !== currentObj)) {
-        return true;
-      }
-    }
-
-    return false;
+  includes(object, startAt) {
+    return indexOf(this, object, startAt, true) !== -1;
   },
 
   /**
@@ -1031,17 +1002,7 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   uniq() {
-    let ret = A();
-
-    let seen = new Set();
-    this.forEach(item => {
-      if (!seen.has(item)) {
-        seen.add(item);
-        ret.push(item);
-      }
-    });
-
-    return ret;
+    return uniqBy(this);
   },
 
   /**
@@ -1051,26 +1012,19 @@ const ArrayMixin = Mixin.create(Enumerable, {
     ```javascript
     let arr = [{ value: 'a' }, { value: 'a' }, { value: 'b' }, { value: 'b' }];
     arr.uniqBy('value');  // [{ value: 'a' }, { value: 'b' }]
+
+    let arr = [2.2, 2.1, 3.2, 3.3];
+    arr.uniqBy(Math.floor);  // [2.2, 3.2];
     ```
 
     @method uniqBy
+    @param {String,Function} key
     @return {EmberArray}
     @public
   */
 
   uniqBy(key) {
-    let ret = A();
-    let seen = new Set();
-
-    this.forEach(item => {
-      let val = get(item, key);
-      if (!seen.has(val)) {
-        seen.add(val);
-        ret.push(item);
-      }
-    });
-
-    return ret;
+    return uniqBy(this, key);
   },
 
   /**
@@ -1093,16 +1047,9 @@ const ArrayMixin = Mixin.create(Enumerable, {
       return this; // nothing to do
     }
 
-    let ret = A();
-
-    this.forEach(k => {
-      // SameValueZero comparison (NaN !== NaN)
-      if (!(k === value || (k !== k && value !== value))) {
-        ret[ret.length] = k;
-      }
-    });
-
-    return ret;
+    // SameValueZero comparison (NaN !== NaN)
+    let predicate = value === value ? item => item !== value : item => item === item;
+    return this.filter(predicate);
   },
 
   /**
@@ -1143,11 +1090,10 @@ const ArrayMixin = Mixin.create(Enumerable, {
 });
 
 const OUT_OF_RANGE_EXCEPTION = 'Index out of range';
-const EMPTY = [];
 
 export function removeAt(array, start, len) {
   if ('number' === typeof start) {
-    if (start < 0 || start >= get(array, 'length')) {
+    if (start < 0 || start >= array.length) {
       throw new EmberError(OUT_OF_RANGE_EXCEPTION);
     }
 
@@ -1156,7 +1102,7 @@ export function removeAt(array, start, len) {
       len = 1;
     }
 
-    array.replace(start, len, EMPTY);
+    array.replace(start, len, EMPTY_ARRAY);
   }
 
   return array;
@@ -1219,12 +1165,12 @@ const MutableArray = Mixin.create(ArrayMixin, MutableEnumerable, {
     @public
   */
   clear() {
-    let len = get(this, 'length');
+    let len = this.length;
     if (len === 0) {
       return this;
     }
 
-    this.replace(0, len, EMPTY);
+    this.replace(0, len, EMPTY_ARRAY);
     return this;
   },
 
@@ -1246,7 +1192,7 @@ const MutableArray = Mixin.create(ArrayMixin, MutableEnumerable, {
     @public
   */
   insertAt(idx, object) {
-    if (idx > get(this, 'length')) {
+    if (idx > this.length) {
       throw new EmberError(OUT_OF_RANGE_EXCEPTION);
     }
 
@@ -1296,7 +1242,7 @@ const MutableArray = Mixin.create(ArrayMixin, MutableEnumerable, {
     @public
   */
   pushObject(obj) {
-    this.insertAt(get(this, 'length'), obj);
+    this.insertAt(this.length, obj);
     return obj;
   },
 
@@ -1319,7 +1265,7 @@ const MutableArray = Mixin.create(ArrayMixin, MutableEnumerable, {
     if (!Array.isArray(objects)) {
       throw new TypeError('Must pass Enumerable to MutableArray#pushObjects');
     }
-    this.replace(get(this, 'length'), 0, objects);
+    this.replace(this.length, 0, objects);
     return this;
   },
 
@@ -1339,7 +1285,7 @@ const MutableArray = Mixin.create(ArrayMixin, MutableEnumerable, {
     @public
   */
   popObject() {
-    let len = get(this, 'length');
+    let len = this.length;
     if (len === 0) {
       return null;
     }
@@ -1365,7 +1311,7 @@ const MutableArray = Mixin.create(ArrayMixin, MutableEnumerable, {
     @public
   */
   shiftObject() {
-    if (get(this, 'length') === 0) {
+    if (this.length === 0) {
       return null;
     }
 
@@ -1425,7 +1371,7 @@ const MutableArray = Mixin.create(ArrayMixin, MutableEnumerable, {
      @public
   */
   reverseObjects() {
-    let len = get(this, 'length');
+    let len = this.length;
     if (len === 0) {
       return this;
     }
@@ -1457,7 +1403,7 @@ const MutableArray = Mixin.create(ArrayMixin, MutableEnumerable, {
       return this.clear();
     }
 
-    let len = get(this, 'length');
+    let len = this.length;
     this.replace(0, len, objects);
     return this;
   },
@@ -1479,7 +1425,7 @@ const MutableArray = Mixin.create(ArrayMixin, MutableEnumerable, {
     @public
   */
   removeObject(obj) {
-    let loc = get(this, 'length') || 0;
+    let loc = this.length || 0;
     while (--loc >= 0) {
       let curObject = objectAt(this, loc);
 
@@ -1605,16 +1551,6 @@ const MutableArray = Mixin.create(ArrayMixin, MutableEnumerable, {
   @public
 */
 let NativeArray = Mixin.create(MutableArray, Observable, Copyable, {
-  // because length is a built-in property we need to know to just get the
-  // original property.
-  get(key) {
-    if ('number' === typeof key) {
-      return this[key];
-    } else {
-      return this._super(key);
-    }
-  },
-
   objectAt(idx) {
     return this[idx];
   },
@@ -1626,16 +1562,6 @@ let NativeArray = Mixin.create(MutableArray, Observable, Copyable, {
     replaceInNativeArray(this, start, deleteCount, items);
 
     return this;
-  },
-
-  // If you ask for an unknown property, then try to collect the value
-  // from member items.
-  unknownProperty(key, value) {
-    let ret; // = this.reducedProperty(key, value);
-    if (value !== undefined && ret === undefined) {
-      ret = this[key] = value;
-    }
-    return ret;
   },
 
   indexOf: Array.prototype.indexOf,

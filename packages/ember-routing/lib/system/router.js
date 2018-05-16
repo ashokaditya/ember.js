@@ -1,23 +1,16 @@
-import { assign, getOwner } from 'ember-utils';
-import {
-  get,
-  set,
-  defineProperty,
-  computed,
-  run,
-  once,
-  scheduleOnce,
-  schedule,
-  cancel,
-} from 'ember-metal';
-import { Error as EmberError, deprecate, assert, info } from 'ember-debug';
+import { getOwner } from 'ember-owner';
+import { assign } from '@ember/polyfills';
+import { cancel, once, run, scheduleOnce, schedule } from '@ember/runloop';
+import { get, set, defineProperty, computed } from 'ember-metal';
+import EmberError from '@ember/error';
+import { assert, deprecate, info } from '@ember/debug';
 import { Object as EmberObject, Evented, typeOf, A as emberA } from 'ember-runtime';
 import { defaultSerialize, hasDefaultSerialize } from './route';
 import EmberRouterDSL from './dsl';
 import EmberLocation from '../location/api';
 import { resemblesURL, getActiveTargetName, calculateCacheKey, extractRouteArgs } from '../utils';
 import RouterState from './router_state';
-import { DEBUG } from 'ember-env-flags';
+import { DEBUG } from '@glimmer/env';
 
 /**
 @module @ember/routing

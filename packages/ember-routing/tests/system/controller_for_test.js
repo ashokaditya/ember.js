@@ -1,8 +1,8 @@
-import { Controller } from 'ember-runtime';
-import controllerFor from '../../system/controller_for';
-import generateController from '../../system/generate_controller';
+import Controller from '@ember/controller';
+import controllerFor from '../../lib/system/controller_for';
+import generateController from '../../lib/system/generate_controller';
 import { moduleFor, ApplicationTestCase } from 'internal-test-helpers';
-import { getDebugFunction, setDebugFunction } from 'ember-debug';
+import { getDebugFunction, setDebugFunction } from '@ember/debug';
 
 const originalDebug = getDebugFunction('debug');
 const noop = function() {};

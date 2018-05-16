@@ -1,7 +1,8 @@
-import { getOwner } from 'ember-utils';
-import { assert } from 'ember-debug';
+import { getOwner } from 'ember-owner';
+import { assert } from '@ember/debug';
 import { ComputedProperty } from './computed';
-import { descriptorFor } from './meta';
+import { descriptorFor } from 'ember-meta';
+import { EMBER_MODULE_UNIFICATION } from '@ember/canary-features';
 
 /**
  @module ember
@@ -24,19 +25,22 @@ export default class InjectedProperty extends ComputedProperty {
     super(injectedPropertyGet);
 
     this.type = type;
-    this.source = options ? options.source : undefined;
+    this.name = name;
 
-    if (name) {
-      let namespaceDelimiterOffset = name.indexOf('::');
-      if (namespaceDelimiterOffset === -1) {
-        this.name = name;
-        this.namespace = undefined;
-      } else {
-        this.name = name.slice(namespaceDelimiterOffset + 2);
-        this.namespace = name.slice(0, namespaceDelimiterOffset);
+    if (EMBER_MODULE_UNIFICATION) {
+      this.source = options ? options.source : undefined;
+      this.namespace = undefined;
+
+      if (name) {
+        let namespaceDelimiterOffset = name.indexOf('::');
+        if (namespaceDelimiterOffset === -1) {
+          this.name = name;
+          this.namespace = undefined;
+        } else {
+          this.name = name.slice(namespaceDelimiterOffset + 2);
+          this.namespace = name.slice(0, namespaceDelimiterOffset);
+        }
       }
-    } else {
-      this.name = undefined;
     }
   }
 }

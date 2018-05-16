@@ -1,5 +1,5 @@
 import { get } from 'ember-metal';
-import { ControllerMixin } from 'ember-runtime';
+import ControllerMixin from '@ember/controller/lib/controller_mixin';
 import { prefixRouteNameArg } from '../utils';
 
 /**
@@ -24,6 +24,7 @@ ControllerMixin.reopen({
         }
       }]
     ```
+    @for Ember.ControllerMixin
     @property queryParams
     @public
   */

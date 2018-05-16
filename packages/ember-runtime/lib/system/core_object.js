@@ -2,11 +2,9 @@
   @module @ember/object
 */
 
-// using ember-metal/lib/main here to ensure that ember-debug is setup
-// if present
 import { FACTORY_FOR } from 'container';
+import { assign } from '@ember/polyfills';
 import {
-  assign,
   guidFor,
   getName,
   setName,
@@ -14,6 +12,7 @@ import {
   HAS_NATIVE_PROXY,
   isInternalSymbol,
 } from 'ember-utils';
+import { schedule } from '@ember/runloop';
 import {
   PROXY_CONTENT,
   descriptorFor,
@@ -25,17 +24,14 @@ import {
   defineProperty,
   ComputedProperty,
   InjectedProperty,
-  schedule,
   deleteMeta,
   descriptor,
   classToString,
 } from 'ember-metal';
 import ActionHandler from '../mixins/action_handler';
-import { validatePropertyInjections } from '../inject';
-import { assert } from 'ember-debug';
-import { DEBUG } from 'ember-env-flags';
+import { assert } from '@ember/debug';
+import { DEBUG } from '@glimmer/env';
 import { ENV } from 'ember-environment';
-import { MANDATORY_GETTER, MANDATORY_SETTER, EMBER_METAL_ES5_GETTERS } from 'ember/features';
 
 const applyMixin = Mixin._apply;
 const reopen = Mixin.prototype.reopen;
@@ -80,13 +76,7 @@ function makeCtor(base) {
           beforeInitCalled = true;
         }
 
-        if (
-          DEBUG &&
-          MANDATORY_GETTER &&
-          EMBER_METAL_ES5_GETTERS &&
-          HAS_NATIVE_PROXY &&
-          typeof self.unknownProperty === 'function'
-        ) {
+        if (DEBUG && HAS_NATIVE_PROXY && typeof self.unknownProperty === 'function') {
           let messageFor = (obj, property) => {
             return (
               `You attempted to access the \`${String(property)}\` property (of ${obj}).\n` +
@@ -118,8 +108,8 @@ function makeCtor(base) {
                 property === 'didUnwatchProperty' ||
                 property === 'didAddListener' ||
                 property === 'didRemoveListener' ||
-                property === '__DESCRIPTOR__' ||
                 property === 'isDescriptor' ||
+                property === '_onLookup' ||
                 property in target
               ) {
                 return Reflect.get(target, property, receiver);
@@ -127,9 +117,13 @@ function makeCtor(base) {
 
               let value = target.unknownProperty.call(receiver, property);
 
-              assert(messageFor(receiver, property), value === undefined);
+              if (typeof value !== 'function') {
+                assert(messageFor(receiver, property), value === undefined || value === null);
+              }
             },
           });
+
+          FACTORY_FOR.set(self, FACTORY_FOR.get(this));
         }
 
         let m = meta(self);
@@ -204,7 +198,7 @@ function makeCtor(base) {
             } else if (typeof self.setUnknownProperty === 'function' && !(keyName in self)) {
               self.setUnknownProperty(keyName, value);
             } else {
-              if (MANDATORY_SETTER) {
+              if (DEBUG) {
                 defineProperty(self, keyName, null, value); // setup mandatory setter
               } else {
                 self[keyName] = value;
@@ -239,7 +233,7 @@ function makeCtor(base) {
     };
   }
 
-  Class.willReopen = () => {
+  Class.willReopen = function() {
     if (wasApplied) {
       Class.PrototypeMixin = Mixin.create(Class.PrototypeMixin);
     }
@@ -247,7 +241,7 @@ function makeCtor(base) {
     wasApplied = false;
   };
 
-  Class.proto = () => {
+  Class.proto = function() {
     let superclass = Class.superclass;
     if (superclass) {
       superclass.proto();
@@ -258,7 +252,10 @@ function makeCtor(base) {
       Class.PrototypeMixin.applyPartial(Class.prototype);
     }
 
-    return Class.prototype;
+    // Native classes will call the nearest superclass's proto function,
+    // and proto is expected to return the current instance's prototype,
+    // so we need to return it from `this` instead
+    return this.prototype;
   };
 
   return Class;
@@ -985,10 +982,6 @@ let ClassMixinProps = {
   },
 };
 
-function injectedPropertyAssertion() {
-  assert('Injected properties are invalid', validatePropertyInjections(this));
-}
-
 function flattenProps(...props) {
   let { concatenatedProperties, mergedProperties } = this;
   let hasConcatenatedProps =
@@ -1042,7 +1035,21 @@ if (DEBUG) {
     @private
     @method _onLookup
   */
-  ClassMixinProps._onLookup = injectedPropertyAssertion;
+  ClassMixinProps._onLookup = function injectedPropertyAssertion(debugContainerKey) {
+    let [type] = debugContainerKey.split(':');
+    let proto = this.proto();
+
+    for (let key in proto) {
+      let desc = descriptorFor(proto, key);
+      if (desc instanceof InjectedProperty) {
+        assert(
+          `Defining \`${key}\` as an injected controller property on a non-controller (\`${debugContainerKey}\`) is not allowed.`,
+          type === 'controller' || desc.type !== 'controller'
+        );
+      }
+    }
+  };
+
   /**
     Returns a hash of property names and container names that injected
     properties will lookup on the container lazily.

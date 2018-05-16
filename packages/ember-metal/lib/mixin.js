@@ -1,12 +1,21 @@
 /**
 @module @ember/object
 */
-import { EMBER_METAL_ES5_GETTERS } from 'ember/features';
-import { assign, guidFor, ROOT, wrap, makeArray } from 'ember-utils';
-import { assert } from 'ember-debug';
-import { DEBUG } from 'ember-env-flags';
+import { assign } from '@ember/polyfills';
+import {
+  guidFor,
+  ROOT,
+  wrap,
+  makeArray,
+  NAME_KEY,
+  getObservers,
+  getListeners,
+  setObservers,
+} from 'ember-utils';
+import { assert } from '@ember/debug';
+import { DEBUG } from '@glimmer/env';
 import { ENV } from 'ember-environment';
-import { descriptorFor, meta as metaFor, peekMeta } from './meta';
+import { descriptorFor, meta as metaFor, peekMeta } from 'ember-meta';
 import expandProperties from './expand_properties';
 import { Descriptor, defineProperty } from './properties';
 import { ComputedProperty } from './computed';
@@ -99,10 +108,7 @@ function giveMethodSuper(obj, key, method, values, descs) {
 
   // If we didn't find the original value in a parent mixin, find it in
   // the original object
-  if (
-    superMethod === undefined &&
-    (!EMBER_METAL_ES5_GETTERS || descriptorFor(obj, key) === undefined)
-  ) {
+  if (superMethod === undefined && descriptorFor(obj, key) === undefined) {
     superMethod = obj[key];
   }
 
@@ -276,13 +282,13 @@ function updateObserversAndListeners(obj, key, paths, updateMethod) {
 
 function replaceObserversAndListeners(obj, key, prev, next) {
   if (typeof prev === 'function') {
-    updateObserversAndListeners(obj, key, prev.__ember_observes__, removeObserver);
-    updateObserversAndListeners(obj, key, prev.__ember_listens__, removeListener);
+    updateObserversAndListeners(obj, key, getObservers(prev), removeObserver);
+    updateObserversAndListeners(obj, key, getListeners(prev), removeListener);
   }
 
   if (typeof next === 'function') {
-    updateObserversAndListeners(obj, key, next.__ember_observes__, addObserver);
-    updateObserversAndListeners(obj, key, next.__ember_listens__, addListener);
+    updateObserversAndListeners(obj, key, getObservers(next), addObserver);
+    updateObserversAndListeners(obj, key, getListeners(next), addListener);
   }
 }
 
@@ -323,7 +329,7 @@ function applyMixin(obj, mixins, partial) {
       continue;
     }
 
-    if (EMBER_METAL_ES5_GETTERS && descriptorFor(obj, key) !== undefined) {
+    if (descriptorFor(obj, key) !== undefined) {
       replaceObserversAndListeners(obj, key, null, value);
     } else {
       replaceObserversAndListeners(obj, key, obj[key], value);
@@ -449,6 +455,7 @@ export default class Mixin {
     this._without = undefined;
 
     if (DEBUG) {
+      this[NAME_KEY] = undefined;
       /*
         In debug builds, we seal mixins to help avoid performance pitfalls.
 
@@ -609,6 +616,7 @@ if (ENV._ENABLE_BINDING_SUPPORT) {
 Mixin.prototype.toString = classToString;
 
 if (DEBUG) {
+  Mixin.prototype[NAME_KEY] = undefined;
   Object.seal(Mixin.prototype);
 }
 
@@ -733,7 +741,7 @@ export function observer(...args) {
     expandProperties(_paths[i], addWatchedProperty);
   }
 
-  func.__ember_observes__ = paths;
+  setObservers(func, paths);
   return func;
 }
 

@@ -1,7 +1,8 @@
+import { run } from '@ember/runloop';
 import { guidFor, setName } from 'ember-utils';
 import { context } from 'ember-environment';
-import EmberObject from '../../../system/object';
-import Namespace from '../../../system/namespace';
+import EmberObject from '../../../lib/system/object';
+import Namespace from '../../../lib/system/namespace';
 import { moduleFor, AbstractTestCase } from 'internal-test-helpers';
 
 let originalLookup = context.lookup;
@@ -35,6 +36,8 @@ moduleFor(
       assert.equal(obj.toString(), '<Foo.Bar:' + guidFor(obj) + '>');
 
       assert.equal(Foo.Bar.toString(), 'Foo.Bar');
+
+      run(Foo, 'destroy');
     }
 
     ['@test toString on a class returns a useful value when nested in a namespace'](assert) {
@@ -59,12 +62,16 @@ moduleFor(
 
       obj = Foo.Bar.create();
       assert.equal(obj.toString(), '<Foo.Bar:' + guidFor(obj) + '>');
+
+      run(Foo, 'destroy');
     }
 
     ['@test toString on a namespace finds the namespace in lookup'](assert) {
       let Foo = (lookup.Foo = Namespace.create());
 
       assert.equal(Foo.toString(), 'Foo');
+
+      run(Foo, 'destroy');
     }
 
     ['@test toString on a namespace finds the namespace in lookup'](assert) {
@@ -77,12 +84,16 @@ moduleFor(
 
       obj = Foo.Bar.create();
       assert.equal(obj.toString(), '<Foo.Bar:' + guidFor(obj) + '>');
+
+      run(Foo, 'destroy');
     }
 
     ['@test toString on a namespace falls back to modulePrefix, if defined'](assert) {
       let Foo = Namespace.create({ modulePrefix: 'foo' });
 
       assert.equal(Foo.toString(), 'foo');
+
+      run(Foo, 'destroy');
     }
 
     ['@test toString includes toStringExtension if defined'](assert) {

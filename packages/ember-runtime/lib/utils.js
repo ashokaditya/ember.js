@@ -1,5 +1,9 @@
-import EmberArray from './mixins/array';
+import { DEBUG } from '@glimmer/env';
+import { PROXY_CONTENT, get } from 'ember-metal';
+import { HAS_NATIVE_PROXY } from 'ember-utils';
+import EmberArray, { A } from './mixins/array';
 import EmberObject from './system/object';
+import { assert } from '@ember/debug';
 
 // ........................................
 // TYPING & ARRAY MESSAGING
@@ -48,7 +52,15 @@ const { toString } = Object.prototype;
   @return {Boolean} true if the passed object is an array or Array-like
   @public
 */
-export function isArray(obj) {
+export function isArray(_obj) {
+  let obj = _obj;
+  if (DEBUG && HAS_NATIVE_PROXY && typeof _obj === 'object' && _obj !== null) {
+    let possibleProxyContent = _obj[PROXY_CONTENT];
+    if (possibleProxyContent !== undefined) {
+      obj = possibleProxyContent;
+    }
+  }
+
   if (!obj || obj.setInterval) {
     return false;
   }
@@ -154,6 +166,26 @@ export function typeOf(item) {
       ret = 'date';
     }
   }
+
+  return ret;
+}
+
+const identityFunction = item => item;
+
+export function uniqBy(array, key = identityFunction) {
+  assert(`first argument passed to \`uniqBy\` should be array`, isArray(array));
+
+  let ret = A();
+  let seen = new Set();
+  let getter = typeof key === 'function' ? key : item => get(item, key);
+
+  array.forEach(item => {
+    let val = getter(item);
+    if (!seen.has(val)) {
+      seen.add(val);
+      ret.push(item);
+    }
+  });
 
   return ret;
 }

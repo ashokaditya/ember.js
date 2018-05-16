@@ -1,9 +1,10 @@
 import { context } from 'ember-environment';
-import { get, computed, run, observer } from 'ember-metal';
-import { w } from '../../../../system/string';
-import EmberObject from '../../../../system/object';
-import Observable from '../../../../mixins/observable';
-import { A as emberA } from '../../../../mixins/array';
+import { run } from '@ember/runloop';
+import { get, computed, observer } from 'ember-metal';
+import { w } from '@ember/string';
+import EmberObject from '../../../../lib/system/object';
+import Observable from '../../../../lib/mixins/observable';
+import { A as emberA } from '../../../../lib/mixins/array';
 import { moduleFor, AbstractTestCase } from 'internal-test-helpers';
 
 /*

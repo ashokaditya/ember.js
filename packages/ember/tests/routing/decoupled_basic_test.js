@@ -1,15 +1,17 @@
 /* eslint-disable no-console */
-import { getOwner } from 'ember-utils';
+import { getOwner } from 'ember-owner';
 import RSVP from 'rsvp';
 import { compile } from 'ember-template-compiler';
 import { ENV } from 'ember-environment';
 import { Route, NoneLocation, HistoryLocation } from 'ember-routing';
-import { Controller, Object as EmberObject, A as emberA, copy } from 'ember-runtime';
-import { moduleFor, ApplicationTestCase } from 'internal-test-helpers';
-import { Mixin, computed, run, set, addObserver, observer } from 'ember-metal';
+import Controller from '@ember/controller';
+import { Object as EmberObject, A as emberA, copy } from 'ember-runtime';
+import { moduleFor, ApplicationTestCase, runDestroy } from 'internal-test-helpers';
+import { run } from '@ember/runloop';
+import { Mixin, computed, set, addObserver, observer } from 'ember-metal';
 import { getTextOf } from 'internal-test-helpers';
 import { Component } from 'ember-glimmer';
-import { Engine } from 'ember-application';
+import Engine from '@ember/engine';
 import { Transition } from 'router';
 
 let originalRenderSupport;
@@ -2024,27 +2026,29 @@ moduleFor(
         obj.set('history', { state: { path: path } });
       };
 
+      let location = HistoryLocation.create({
+        initState() {
+          let path = rootURL + '/posts';
+
+          setHistory(this, path);
+          this.set('location', {
+            pathname: path,
+            href: 'http://localhost/' + path,
+          });
+        },
+
+        replaceState(path) {
+          setHistory(this, path);
+        },
+
+        pushState(path) {
+          setHistory(this, path);
+        },
+      });
+
       this.router.reopen({
         // location: 'historyTest',
-        location: HistoryLocation.create({
-          initState() {
-            let path = rootURL + '/posts';
-
-            setHistory(this, path);
-            this.set('location', {
-              pathname: path,
-              href: 'http://localhost/' + path,
-            });
-          },
-
-          replaceState(path) {
-            setHistory(this, path);
-          },
-
-          pushState(path) {
-            setHistory(this, path);
-          },
-        }),
+        location,
         rootURL: rootURL,
       });
 
@@ -2064,6 +2068,9 @@ moduleFor(
 
       return this.visit('/').then(() => {
         assert.ok(postsTemplateRendered, 'Posts route successfully stripped from rootURL');
+
+        runDestroy(location);
+        location = null;
       });
     }
 
@@ -3519,6 +3526,7 @@ moduleFor(
           },
         })
       );
+      console.error = () => {};
 
       this.visit('/').then(() => {
         let rootElement = document.querySelector('#qunit-fixture');

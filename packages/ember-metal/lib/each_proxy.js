@@ -1,8 +1,7 @@
-import { assert } from 'ember-debug';
-import { get } from './property_get';
+import { assert } from '@ember/debug';
 import { notifyPropertyChange } from './property_events';
 import { addObserver, removeObserver } from './observer';
-import { meta, peekMeta } from './meta';
+import { meta, peekMeta } from 'ember-meta';
 import { objectAt } from './array';
 
 const EACH_PROXIES = new WeakMap();
@@ -89,7 +88,7 @@ class EachProxy {
     if (!keys[keyName]) {
       keys[keyName] = 1;
       let content = this._content;
-      let len = get(content, 'length');
+      let len = content.length;
 
       addObserverForContentKey(content, keyName, this, 0, len);
     } else {
@@ -101,7 +100,7 @@ class EachProxy {
     let keys = this._keys;
     if (keys !== undefined && keys[keyName] > 0 && --keys[keyName] <= 0) {
       let content = this._content;
-      let len = get(content, 'length');
+      let len = content.length;
 
       removeObserverForContentKey(content, keyName, this, 0, len);
     }

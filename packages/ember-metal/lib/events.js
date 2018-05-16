@@ -2,8 +2,9 @@
 @module @ember/object
 */
 import { ENV } from 'ember-environment';
-import { deprecate, assert } from 'ember-debug';
-import { meta as metaFor, peekMeta } from './meta';
+import { assert, deprecate } from '@ember/debug';
+import { setListeners } from 'ember-utils';
+import { meta as metaFor, peekMeta } from 'ember-meta';
 
 /*
   The event system uses a series of nested hashes to store listeners on an
@@ -196,6 +197,6 @@ export function on(...args) {
     events.length > 0 && events.every(p => typeof p === 'string' && p.length)
   );
 
-  func.__ember_listens__ = events;
+  setListeners(func, events);
   return func;
 }

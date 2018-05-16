@@ -1,3 +1,6 @@
+import { EMBER_MODULE_UNIFICATION, GLIMMER_CUSTOM_COMPONENT_MANAGER } from '@ember/canary-features';
+import { assert } from '@ember/debug';
+import { _instrumentStart } from '@ember/instrumentation';
 import {
   ComponentDefinition,
   Opaque,
@@ -7,12 +10,9 @@ import {
 import { LazyCompiler, Macros, PartialDefinition } from '@glimmer/opcode-compiler';
 import { ComponentManager, getDynamicVar, Helper, ModifierManager } from '@glimmer/runtime';
 import { privatize as P } from 'container';
-import { assert } from 'ember-debug';
 import { ENV } from 'ember-environment';
-import { _instrumentStart } from 'ember-metal';
-import { LookupOptions, Owner, setOwner } from 'ember-utils';
+import { LookupOptions, Owner, setOwner } from 'ember-owner';
 import { lookupComponent, lookupPartial, OwnedTemplateMeta } from 'ember-views';
-import { EMBER_MODULE_UNIFICATION, GLIMMER_CUSTOM_COMPONENT_MANAGER } from 'ember/features';
 import CompileTimeLookup from './compile-time-lookup';
 import { CurlyComponentDefinition } from './component-managers/curly';
 import CustomComponentManager, { CustomComponentState } from './component-managers/custom';
@@ -99,10 +99,13 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
   } = BUILTIN_MODIFIERS;
 
   // supports directly imported late bound layouts on component.prototype.layout
-  private templateCache: WeakMap<Owner, WeakMap<TemplateFactory, OwnedTemplate>> = new WeakMap();
+  private templateCache: Map<Owner, Map<TemplateFactory, OwnedTemplate>> = new Map();
+  private componentDefinitionCache: Map<object, ComponentDefinition | null> = new Map();
 
   public templateCacheHits = 0;
   public templateCacheMisses = 0;
+  public componentDefinitionCount = 0;
+  public helperDefinitionCount = 0;
 
   constructor() {
     let macros = new Macros();
@@ -113,6 +116,7 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
   /***  IRuntimeResolver ***/
 
   /**
+   * public componentDefHandleCount = 0;
    * Called while executing Append Op.PushDynamicComponentManager if string
    */
   lookupComponentDefinition(name: string, meta: OwnedTemplateMeta): Option<ComponentDefinition> {
@@ -127,7 +131,12 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
   }
 
   lookupComponentHandle(name: string, meta: OwnedTemplateMeta) {
-    return this.handle(this._lookupComponentDefinition(name, meta));
+    let nextHandle = this.handles.length;
+    let handle = this.handle(this._lookupComponentDefinition(name, meta));
+    if (nextHandle === handle) {
+      this.componentDefinitionCount++;
+    }
+    return handle;
   }
 
   /**
@@ -142,9 +151,15 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
    * Called by CompileTimeLookup compiling Unknown or Helper OpCode
    */
   lookupHelper(name: string, meta: OwnedTemplateMeta): Option<number> {
-    let handle = this._lookupHelper(name, meta);
-    if (handle !== null) {
-      return this.handle(handle);
+    let nextHandle = this.handles.length;
+    let helper = this._lookupHelper(name, meta);
+    if (helper !== null) {
+      let handle = this.handle(helper);
+
+      if (nextHandle === handle) {
+        this.helperDefinitionCount++;
+      }
+      return handle;
     }
     return null;
   }
@@ -174,7 +189,7 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
   createTemplate(factory: TemplateFactory, owner: Owner): OwnedTemplate {
     let cache = this.templateCache.get(owner);
     if (cache === undefined) {
-      cache = new WeakMap();
+      cache = new Map();
       this.templateCache.set(owner, cache);
     }
     let template = cache.get(factory);
@@ -229,15 +244,11 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
       return null;
     }
 
-    if (isSimpleHelper(factory)) {
-      const helper = factory.create().compute;
-      return (_vm, args) => {
-        return SimpleHelperReference.create(helper, args.capture());
-      };
-    }
-
     return (vm, args) => {
       const helper = factory.create();
+      if (isSimpleHelper(helper)) {
+        return new SimpleHelperReference(helper.compute, args.capture());
+      }
       vm.newDestroyable(helper);
       return ClassBasedHelperReference.create(helper, args.capture());
     };
@@ -291,8 +302,21 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
       makeOptions(meta.moduleName, namespace)
     );
 
+    let key = component === undefined ? layout : component;
+
+    if (key === undefined) {
+      return null;
+    }
+
+    let cachedComponentDefinition = this.componentDefinitionCache.get(key);
+    if (cachedComponentDefinition !== undefined) {
+      return cachedComponentDefinition;
+    }
+
     if (layout && !component && ENV._TEMPLATE_ONLY_GLIMMER_COMPONENTS) {
-      return new TemplateOnlyComponentDefinition(layout);
+      let definition = new TemplateOnlyComponentDefinition(layout);
+      this.componentDefinitionCache.set(key, definition);
+      return definition;
     }
 
     let manager:
@@ -312,11 +336,14 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
             manager,
             component || meta.owner.factoryFor(P`component:-default`),
             null,
-            layout
+            layout! // TODO fix type
           )
         : null;
 
     finalizer();
+
+    this.componentDefinitionCache.set(key, definition);
+
     return definition;
   }
 }

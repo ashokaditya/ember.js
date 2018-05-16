@@ -1,8 +1,10 @@
-import { Controller } from 'ember-runtime';
+import { getOwner } from 'ember-owner';
+import Controller from '@ember/controller';
+import Service, { inject as injectService } from '@ember/service';
+import { _ProxyMixin } from 'ember-runtime';
 import { moduleFor, ApplicationTestCase } from 'internal-test-helpers';
-import { inject, Service } from 'ember-runtime';
 import { computed } from 'ember-metal';
-import { EMBER_METAL_ES5_GETTERS, EMBER_MODULE_UNIFICATION } from 'ember/features';
+import { EMBER_MODULE_UNIFICATION } from '@ember/canary-features';
 
 moduleFor(
   'Service Injection',
@@ -11,7 +13,7 @@ moduleFor(
       this.add(
         'controller:application',
         Controller.extend({
-          myService: inject.service('my-service'),
+          myService: injectService('my-service'),
         })
       );
       let MyService = Service.extend();
@@ -23,41 +25,61 @@ moduleFor(
         assert.ok(controller.get('myService') instanceof MyService);
       });
     }
+
+    ['@test Service can be an object proxy and access owner in init GH#16484'](assert) {
+      let serviceOwner;
+
+      this.add(
+        'controller:application',
+        Controller.extend({
+          myService: injectService('my-service'),
+        })
+      );
+      let MyService = Service.extend(_ProxyMixin, {
+        init() {
+          this._super(...arguments);
+
+          serviceOwner = getOwner(this);
+        },
+      });
+      this.add('service:my-service', MyService);
+      this.addTemplate('application', '');
+
+      this.visit('/').then(instance => {
+        let controller = this.applicationInstance.lookup('controller:application');
+        assert.ok(controller.get('myService') instanceof MyService);
+        assert.equal(serviceOwner, instance, 'should be able to `getOwner` in init');
+      });
+    }
   }
 );
 
-if (EMBER_METAL_ES5_GETTERS) {
-  moduleFor(
-    'Service Injection with ES5 Getters',
-    class extends ApplicationTestCase {
-      ['@test Service can be injected and is resolved without calling `get`'](assert) {
-        this.add(
-          'controller:application',
-          Controller.extend({
-            myService: inject.service('my-service'),
-          })
-        );
-        let MyService = Service.extend({
-          name: computed(function() {
-            return 'The service name';
-          }),
-        });
-        this.add('service:my-service', MyService);
-        this.addTemplate('application', '');
+moduleFor(
+  'Service Injection with ES5 Getters',
+  class extends ApplicationTestCase {
+    ['@test Service can be injected and is resolved without calling `get`'](assert) {
+      this.add(
+        'controller:application',
+        Controller.extend({
+          myService: injectService('my-service'),
+        })
+      );
+      let MyService = Service.extend({
+        name: computed(function() {
+          return 'The service name';
+        }),
+      });
+      this.add('service:my-service', MyService);
+      this.addTemplate('application', '');
 
-        this.visit('/').then(() => {
-          let controller = this.applicationInstance.lookup('controller:application');
-          assert.ok(controller.myService instanceof MyService);
-          assert.equal(
-            controller.myService.name,
-            'The service name',
-            'service property accessible'
-          );
-        });
-      }
+      this.visit('/').then(() => {
+        let controller = this.applicationInstance.lookup('controller:application');
+        assert.ok(controller.myService instanceof MyService);
+        assert.equal(controller.myService.name, 'The service name', 'service property accessible');
+      });
     }
-  );
-}
+  }
+);
 
 if (EMBER_MODULE_UNIFICATION) {
   moduleFor(
@@ -68,7 +90,7 @@ if (EMBER_MODULE_UNIFICATION) {
         this.add(
           'controller:application',
           Controller.extend({
-            myService: inject.service('my-service', { source }),
+            myService: injectService('my-service', { source }),
           })
         );
         let MyService = Service.extend();
@@ -98,14 +120,14 @@ if (EMBER_MODULE_UNIFICATION) {
         this.add(
           'controller:route-a',
           Controller.extend({
-            myService: inject.service('my-service', { source: routeASource }),
+            myService: injectService('my-service', { source: routeASource }),
           })
         );
 
         this.add(
           'controller:route-b',
           Controller.extend({
-            myService: inject.service('my-service', { source: routeBSource }),
+            myService: injectService('my-service', { source: routeBSource }),
           })
         );
 
@@ -152,14 +174,14 @@ if (EMBER_MODULE_UNIFICATION) {
         this.add(
           'controller:route-a',
           Controller.extend({
-            myService: inject.service('my-service', { source: routeASource }),
+            myService: injectService('my-service', { source: routeASource }),
           })
         );
 
         this.add(
           'controller:route-b',
           Controller.extend({
-            myService: inject.service('my-service', { source: routeBSource }),
+            myService: injectService('my-service', { source: routeBSource }),
           })
         );
 
@@ -198,14 +220,14 @@ if (EMBER_MODULE_UNIFICATION) {
         this.add(
           'controller:route-a',
           Controller.extend({
-            myService: inject.service('my-service', { source: routeASource }),
+            myService: injectService('my-service', { source: routeASource }),
           })
         );
 
         this.add(
           'controller:route-b',
           Controller.extend({
-            myService: inject.service('my-service'),
+            myService: injectService('my-service'),
           })
         );
 
@@ -234,7 +256,7 @@ if (EMBER_MODULE_UNIFICATION) {
         this.add(
           'controller:application',
           Controller.extend({
-            myService: inject.service('my-namespace::my-service'),
+            myService: injectService('my-namespace::my-service'),
           })
         );
         let MyService = Service.extend();

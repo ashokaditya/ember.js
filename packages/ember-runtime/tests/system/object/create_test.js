@@ -1,6 +1,7 @@
+import { getOwner, setOwner } from 'ember-owner';
 import { computed, Mixin, observer } from 'ember-metal';
-import { MANDATORY_SETTER } from 'ember/features';
-import EmberObject from '../../../system/object';
+import { DEBUG } from '@glimmer/env';
+import EmberObject from '../../../lib/system/object';
 import { moduleFor, AbstractTestCase } from 'internal-test-helpers';
 
 moduleFor(
@@ -28,7 +29,7 @@ moduleFor(
     }
 
     ['@test sets up mandatory setters for watched simple properties'](assert) {
-      if (MANDATORY_SETTER) {
+      if (DEBUG) {
         let MyClass = EmberObject.extend({
           foo: null,
           bar: null,
@@ -111,6 +112,24 @@ moduleFor(
     ['@test EmberObject.create can take undefined as a parameter'](assert) {
       let o = EmberObject.create(undefined);
       assert.deepEqual(EmberObject.create(), o);
+    }
+
+    ['@test can use getOwner in a proxy init GH#16484'](assert) {
+      let owner = {};
+      let options = {};
+      setOwner(options, owner);
+
+      EmberObject.extend({
+        init() {
+          this._super(...arguments);
+          let localOwner = getOwner(this);
+
+          assert.equal(localOwner, owner, 'should be able to `getOwner` in init');
+        },
+        unknownProperty() {
+          return undefined;
+        },
+      }).create(options);
     }
   }
 );
