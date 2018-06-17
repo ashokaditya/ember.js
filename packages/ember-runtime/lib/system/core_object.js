@@ -3,6 +3,7 @@
 */
 
 import { FACTORY_FOR } from 'container';
+import { BINDING_SUPPORT } from '@ember/deprecated-features';
 import { assign } from '@ember/polyfills';
 import {
   guidFor,
@@ -13,18 +14,16 @@ import {
   isInternalSymbol,
 } from 'ember-utils';
 import { schedule } from '@ember/runloop';
+import { descriptorFor, meta, peekMeta, deleteMeta } from 'ember-meta';
 import {
   PROXY_CONTENT,
-  descriptorFor,
-  meta,
-  peekMeta,
   finishChains,
   sendEvent,
   Mixin,
+  applyMixin,
   defineProperty,
   ComputedProperty,
   InjectedProperty,
-  deleteMeta,
   descriptor,
   classToString,
 } from 'ember-metal';
@@ -33,7 +32,6 @@ import { assert } from '@ember/debug';
 import { DEBUG } from '@glimmer/env';
 import { ENV } from 'ember-environment';
 
-const applyMixin = Mixin._apply;
 const reopen = Mixin.prototype.reopen;
 
 function makeCtor(base) {
@@ -154,7 +152,7 @@ function makeCtor(base) {
             let keyName = keyNames[i];
             let value = properties[keyName];
 
-            if (ENV._ENABLE_BINDING_SUPPORT && Mixin.detectBinding(keyName)) {
+            if (BINDING_SUPPORT && ENV._ENABLE_BINDING_SUPPORT && Mixin.detectBinding(keyName)) {
               m.writeBindings(keyName, value);
             }
 
@@ -199,7 +197,7 @@ function makeCtor(base) {
               self.setUnknownProperty(keyName, value);
             } else {
               if (DEBUG) {
-                defineProperty(self, keyName, null, value); // setup mandatory setter
+                defineProperty(self, keyName, null, value, m); // setup mandatory setter
               } else {
                 self[keyName] = value;
               }
@@ -207,7 +205,7 @@ function makeCtor(base) {
           }
         }
 
-        if (ENV._ENABLE_BINDING_SUPPORT) {
+        if (BINDING_SUPPORT && ENV._ENABLE_BINDING_SUPPORT) {
           Mixin.finishPartial(self, m);
         }
 
@@ -699,7 +697,7 @@ let ClassMixinProps = {
     });
 
     const SingingMixin = Mixin.create({
-      sing(thing){
+      sing(thing) {
         alert(`${this.get('name')} sings: la la la ${thing}`);
       }
     });

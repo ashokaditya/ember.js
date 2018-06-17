@@ -2,14 +2,16 @@
 @module @ember/array
 */
 
-import { symbol, toString } from 'ember-utils';
+import { ARRAY_AT_EACH } from '@ember/deprecated-features';
+import { DEBUG } from '@glimmer/env';
+import { PROXY_CONTENT } from 'ember-metal';
+import { symbol, toString, HAS_NATIVE_PROXY, tryInvoke } from 'ember-utils';
 import {
   get,
   set,
   objectAt,
   replaceInNativeArray,
   computed,
-  isNone,
   aliasMethod,
   Mixin,
   hasListeners,
@@ -26,17 +28,36 @@ import Enumerable from './enumerable';
 import compare from '../compare';
 import { ENV } from 'ember-environment';
 import Observable from '../mixins/observable';
-import Copyable from '../mixins/copyable';
 import copy from '../copy';
 import EmberError from '@ember/error';
 import MutableEnumerable from './mutable_enumerable';
-import { uniqBy } from '../utils';
+import { typeOf } from '../type-of';
 
 const EMPTY_ARRAY = Object.freeze([]);
 const EMBER_ARRAY = symbol('EMBER_ARRAY');
 
 export function isEmberArray(obj) {
   return obj && obj[EMBER_ARRAY];
+}
+
+const identityFunction = item => item;
+
+export function uniqBy(array, key = identityFunction) {
+  assert(`first argument passed to \`uniqBy\` should be array`, isArray(array));
+
+  let ret = A();
+  let seen = new Set();
+  let getter = typeof key === 'function' ? key : item => get(item, key);
+
+  array.forEach(item => {
+    let val = getter(item);
+    if (!seen.has(val)) {
+      seen.add(val);
+      ret.push(item);
+    }
+  });
+
+  return ret;
 }
 
 function iter(key, value) {
@@ -82,6 +103,61 @@ function indexOf(array, val, startAt = 0, withNaNCheck) {
   // SameValueZero comparison (NaN !== NaN)
   let predicate = withNaNCheck && val !== val ? item => item !== item : item => item === val;
   return findIndex(array, predicate, startAt);
+}
+
+/**
+  Returns true if the passed object is an array or Array-like.
+
+  Objects are considered Array-like if any of the following are true:
+
+    - the object is a native Array
+    - the object has an objectAt property
+    - the object is an Object, and has a length property
+
+  Unlike `typeOf` this method returns true even if the passed object is
+  not formally an array but appears to be array-like (i.e. implements `Array`)
+
+  ```javascript
+  import { isArray } from '@ember/array';
+  import ArrayProxy from '@ember/array/proxy';
+
+  isArray();                                      // false
+  isArray([]);                                    // true
+  isArray(ArrayProxy.create({ content: [] }));    // true
+  ```
+
+  @method isArray
+  @static
+  @for @ember/array
+  @param {Object} obj The object to test
+  @return {Boolean} true if the passed object is an array or Array-like
+  @public
+*/
+export function isArray(_obj) {
+  let obj = _obj;
+  if (DEBUG && HAS_NATIVE_PROXY && typeof _obj === 'object' && _obj !== null) {
+    let possibleProxyContent = _obj[PROXY_CONTENT];
+    if (possibleProxyContent !== undefined) {
+      obj = possibleProxyContent;
+    }
+  }
+
+  if (!obj || obj.setInterval) {
+    return false;
+  }
+  if (Array.isArray(obj) || ArrayMixin.detect(obj)) {
+    return true;
+  }
+
+  let type = typeOf(obj);
+  if ('array' === type) {
+    return true;
+  }
+  let length = obj.length;
+  if (typeof length === 'number' && length === length && 'object' === type) {
+    return true;
+  }
+  return false;
 }
 
 // ..........................................................
@@ -246,17 +322,15 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @return {Array} New array with specified slice
     @public
   */
-  slice(beginIndex, endIndex) {
+  slice(beginIndex = 0, endIndex) {
     let ret = A();
     let length = this.length;
 
-    if (isNone(beginIndex)) {
-      beginIndex = 0;
-    } else if (beginIndex < 0) {
+    if (beginIndex < 0) {
       beginIndex = length + beginIndex;
     }
 
-    if (isNone(endIndex) || endIndex > length) {
+    if (endIndex === undefined || endIndex > length) {
       endIndex = length;
     } else if (endIndex < 0) {
       endIndex = length + endIndex;
@@ -708,7 +782,7 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   findBy() {
-    return this.find(iter(...arguments));
+    return find(this, iter(...arguments));
   },
 
   /**
@@ -767,7 +841,7 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   isEvery() {
-    return this.every(iter(...arguments));
+    return every(this, iter(...arguments));
   },
 
   /**
@@ -825,7 +899,7 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   isAny() {
-    return this.any(iter(...arguments));
+    return any(this, iter(...arguments));
   },
 
   /**
@@ -858,17 +932,16 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @method reduce
     @param {Function} callback The callback to execute
     @param {Object} initialValue Initial value for the reduce
-    @param {String} reducerProperty internal use only.
     @return {Object} The reduced value.
     @public
   */
-  reduce(callback, initialValue, reducerProperty) {
+  reduce(callback, initialValue) {
     assert('`reduce` expects a function as first argument.', typeof callback === 'function');
 
     let ret = initialValue;
 
     this.forEach(function(item, i) {
-      ret = callback(ret, item, i, this, reducerProperty);
+      ret = callback(ret, item, i, this);
     }, this);
 
     return ret;
@@ -886,17 +959,7 @@ const ArrayMixin = Mixin.create(Enumerable, {
     @public
   */
   invoke(methodName, ...args) {
-    let ret = A();
-
-    this.forEach((x, idx) => {
-      let method = x && x[methodName];
-
-      if ('function' === typeof method) {
-        ret[idx] = args.length ? method.apply(x, args) : x[methodName]();
-      }
-    }, this);
-
-    return ret;
+    return this.map(item => tryInvoke(item, methodName, args));
   },
 
   /**
@@ -1076,30 +1139,28 @@ const ArrayMixin = Mixin.create(Enumerable, {
     ```
 
     @property @each
+    @deprecated
     @public
   */
-  '@each': computed(function() {
-    deprecate(`Getting the '@each' property on object ${toString(this)} is deprecated`, false, {
-      id: 'ember-metal.getting-each',
-      until: '3.5.0',
-      url: 'https://emberjs.com/deprecations/v3.x#toc_getting-the-each-property',
-    });
+  '@each': ARRAY_AT_EACH
+    ? computed(function() {
+        deprecate(`Getting the '@each' property on object ${toString(this)} is deprecated`, false, {
+          id: 'ember-metal.getting-each',
+          until: '3.5.0',
+          url: 'https://emberjs.com/deprecations/v3.x#toc_getting-the-each-property',
+        });
 
-    return eachProxyFor(this);
-  }).readOnly(),
+        return eachProxyFor(this);
+      }).readOnly()
+    : undefined,
 });
 
 const OUT_OF_RANGE_EXCEPTION = 'Index out of range';
 
-export function removeAt(array, start, len) {
+export function removeAt(array, start, len = 1) {
   if ('number' === typeof start) {
     if (start < 0 || start >= array.length) {
       throw new EmberError(OUT_OF_RANGE_EXCEPTION);
-    }
-
-    // fast case
-    if (len === undefined) {
-      len = 1;
     }
 
     array.replace(start, len, EMPTY_ARRAY);
@@ -1547,10 +1608,9 @@ const MutableArray = Mixin.create(ArrayMixin, MutableEnumerable, {
   @class Ember.NativeArray
   @uses MutableArray
   @uses Observable
-  @uses Ember.Copyable
   @public
 */
-let NativeArray = Mixin.create(MutableArray, Observable, Copyable, {
+let NativeArray = Mixin.create(MutableArray, Observable, {
   objectAt(idx) {
     return this[idx];
   },
@@ -1564,10 +1624,12 @@ let NativeArray = Mixin.create(MutableArray, Observable, Copyable, {
     return this;
   },
 
-  indexOf: Array.prototype.indexOf,
-  lastIndexOf: Array.prototype.lastIndexOf,
-
   copy(deep) {
+    deprecate(`Using \`NativeArray#copy\` is deprecated`, false, {
+      id: 'ember-runtime.using-array-copy',
+      until: '3.5.0',
+    });
+
     if (deep) {
       return this.map(item => copy(item, true));
     }

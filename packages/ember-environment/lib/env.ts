@@ -65,6 +65,8 @@ export const ENV = {
 
   RAISE_ON_DEPRECATION: false,
 
+  STRUCTURED_PROFILE: false,
+
   /**
     Whether to insert a `<div class="ember-view" />` wrapper around the
     application template. See RFC #280.
@@ -94,6 +96,20 @@ export const ENV = {
     @private
   */
   _TEMPLATE_ONLY_GLIMMER_COMPONENTS: false,
+
+  /**
+    Whether the app is using jQuery. See RFC #294.
+
+    This is not intended to be set directly, as the implementation may change in
+    the future. Use `@ember/optional-features` instead.
+
+    @property _JQUERY_INTEGRATION
+    @for EmberENV
+    @type Boolean
+    @default true
+    @private
+  */
+  _JQUERY_INTEGRATION: true,
 
   // the following for addon support
   _ENABLE_EMBER_K_SUPPORT: false,
@@ -149,14 +165,15 @@ export const ENV = {
 
   let { EXTEND_PROTOTYPES } = EmberENV;
   if (EXTEND_PROTOTYPES !== undefined) {
-    if (typeof EXTEND_PROTOTYPES === 'object' && EXTEND_PROTOTYPES === null) {
+    if (typeof EXTEND_PROTOTYPES === 'object' && EXTEND_PROTOTYPES !== null) {
       ENV.EXTEND_PROTOTYPES.String = EXTEND_PROTOTYPES.String !== false;
       ENV.EXTEND_PROTOTYPES.Function = EXTEND_PROTOTYPES.Function !== false;
       ENV.EXTEND_PROTOTYPES.Array = EXTEND_PROTOTYPES.Array !== false;
     } else {
-      ENV.EXTEND_PROTOTYPES.String = EXTEND_PROTOTYPES !== false;
-      ENV.EXTEND_PROTOTYPES.Function = EXTEND_PROTOTYPES !== false;
-      ENV.EXTEND_PROTOTYPES.Array = EXTEND_PROTOTYPES !== false;
+      let isEnabled = EXTEND_PROTOTYPES !== false;
+      ENV.EXTEND_PROTOTYPES.String = isEnabled;
+      ENV.EXTEND_PROTOTYPES.Function = isEnabled;
+      ENV.EXTEND_PROTOTYPES.Array = isEnabled;
     }
   }
 

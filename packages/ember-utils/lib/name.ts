@@ -1,9 +1,10 @@
-const NAMES = new WeakMap();
+import { isObject } from './spec';
+const NAMES = new WeakMap<object, string>();
 
-export function setName(obj: object, name: string) {
-  if ((obj !== null && typeof obj === 'object') || typeof obj === 'function') NAMES.set(obj, name);
+export function setName(obj: object, name: string): void {
+  if (isObject(obj)) NAMES.set(obj, name);
 }
 
-export function getName(obj: object) {
+export function getName(obj: object): string | undefined {
   return NAMES.get(obj);
 }

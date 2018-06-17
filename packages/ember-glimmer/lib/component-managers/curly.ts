@@ -1,4 +1,5 @@
 import { assert, deprecate } from '@ember/debug';
+import { POSITIONAL_PARAM_CONFLICT } from '@ember/deprecated-features';
 import { _instrumentStart } from '@ember/instrumentation';
 import { assign } from '@ember/polyfills';
 import { DEBUG } from '@glimmer/env';
@@ -89,7 +90,8 @@ function applyAttributeBindings(
   }
 
   if (seen.indexOf('id') === -1) {
-    operations.setAttribute('id', PrimitiveReference.create(component.elementId), true, null);
+    let id = component.elementId ? component.elementId : guidFor(component);
+    operations.setAttribute('id', PrimitiveReference.create(id), false, null);
   }
 
   if (seen.indexOf('style') === -1) {
@@ -145,10 +147,12 @@ export default class CurlyComponentManager
   }
 
   getTagName(state: ComponentStateBucket): Option<string> {
-    const { component } = state;
-    if (component.tagName === '') {
+    const { component, hasWrappedElement } = state;
+
+    if (!hasWrappedElement) {
       return null;
     }
+
     return (component && component.tagName) || 'div';
   }
 
@@ -181,17 +185,19 @@ export default class CurlyComponentManager
       const count = Math.min(positionalParams.length, args.positional.length);
       named = {};
       assign(named, args.named.capture().map);
-      for (let i = 0; i < count; i++) {
-        const name = positionalParams[i];
-        deprecate(
-          `You cannot specify both a positional param (at position ${i}) and the hash argument \`${name}\`.`,
-          !args.named.has(name),
-          {
-            id: 'ember-glimmer.positional-param-conflict',
-            until: '3.5.0',
-          }
-        );
-        named[name] = args.positional.at(i);
+      if (POSITIONAL_PARAM_CONFLICT) {
+        for (let i = 0; i < count; i++) {
+          const name = positionalParams[i];
+          deprecate(
+            `You cannot specify both a positional param (at position ${i}) and the hash argument \`${name}\`.`,
+            !args.named.has(name),
+            {
+              id: 'ember-glimmer.positional-param-conflict',
+              until: '3.5.0',
+            }
+          );
+          named[name] = args.positional.at(i);
+        }
       }
     } else {
       return null;
@@ -273,8 +279,10 @@ export default class CurlyComponentManager
 
     component.trigger('didReceiveAttrs');
 
+    let hasWrappedElement = component.tagName !== '';
+
     // We usually do this in the `didCreateElement`, but that hook doesn't fire for tagless components
-    if (component.tagName === '') {
+    if (!hasWrappedElement) {
       if (environment.isInteractive) {
         component.trigger('willRender');
       }
@@ -288,7 +296,13 @@ export default class CurlyComponentManager
 
     // Track additional lifecycle metadata about this component in a state bucket.
     // Essentially we're saving off all the state we'll need in the future.
-    let bucket = new ComponentStateBucket(environment, component, capturedArgs, finalizer);
+    let bucket = new ComponentStateBucket(
+      environment,
+      component,
+      capturedArgs,
+      finalizer,
+      hasWrappedElement
+    );
 
     if (args.named.has('class')) {
       bucket.classRef = args.named.get('class');
@@ -298,7 +312,7 @@ export default class CurlyComponentManager
       processComponentInitializationAssertions(component, props);
     }
 
-    if (environment.isInteractive && component.tagName !== '') {
+    if (environment.isInteractive && hasWrappedElement) {
       component.trigger('willRender');
     }
 
@@ -318,14 +332,11 @@ export default class CurlyComponentManager
 
     let { attributeBindings, classNames, classNameBindings } = component;
 
-    operations.setAttribute('id', PrimitiveReference.create(guidFor(component)), false, null);
-
     if (attributeBindings && attributeBindings.length) {
       applyAttributeBindings(element, attributeBindings, component, operations);
     } else {
-      if (component.elementId) {
-        operations.setAttribute('id', PrimitiveReference.create(component.elementId), false, null);
-      }
+      let id = component.elementId ? component.elementId : guidFor(component);
+      operations.setAttribute('id', PrimitiveReference.create(id), false, null);
       IsVisibleBinding.install(element, component, operations);
     }
 

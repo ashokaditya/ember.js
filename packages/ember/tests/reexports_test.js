@@ -2,6 +2,7 @@ import Ember from '../index';
 import { FEATURES } from '@ember/canary-features';
 import { confirmExport } from 'internal-test-helpers';
 import { moduleFor, AbstractTestCase } from 'internal-test-helpers';
+import { jQueryDisabled } from '../../ember-views';
 
 moduleFor(
   'ember reexports',
@@ -95,7 +96,7 @@ let allExports = [
   ['testing', '@ember/debug', { get: 'isTesting', set: 'setTesting' }],
   ['onerror', 'ember-error-handling', { get: 'getOnerror', set: 'setOnerror' }],
   ['FEATURES.isEnabled', '@ember/canary-features', 'isEnabled'],
-  ['meta', 'ember-metal'],
+  ['meta', 'ember-meta'],
   ['get', 'ember-metal'],
   ['set', 'ember-metal'],
   ['_getPath', 'ember-metal'],
@@ -149,7 +150,7 @@ let allExports = [
   ['watch', 'ember-metal'],
   ['isWatching', 'ember-metal'],
   ['unwatch', 'ember-metal'],
-  ['destroy', 'ember-metal', 'deleteMeta'],
+  ['destroy', 'ember-meta', 'deleteMeta'],
   ['libraries', 'ember-metal'],
   ['OrderedSet', '@ember/map/lib/ordered-set', 'default'],
   ['Map', '@ember/map', 'default'],
@@ -168,7 +169,7 @@ let allExports = [
   ['Logger', 'ember-console', 'default'],
 
   // ember-views
-  ['$', 'ember-views', 'jQuery'],
+  !jQueryDisabled && ['$', 'ember-views', 'jQuery'],
   ['ViewUtils.isSimpleClick', 'ember-views', 'isSimpleClick'],
   ['ViewUtils.getViewElement', 'ember-views', 'getViewElement'],
   ['ViewUtils.getViewBounds', 'ember-views', 'getViewBounds'],
@@ -302,4 +303,4 @@ let allExports = [
   // ember-extension-support
   ['DataAdapter', 'ember-extension-support'],
   ['ContainerDebugAdapter', 'ember-extension-support'],
-];
+].filter(Boolean);

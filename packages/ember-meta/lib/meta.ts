@@ -1,4 +1,5 @@
 import { assert } from '@ember/debug';
+import { BINDING_SUPPORT } from '@ember/deprecated-features';
 import { DEBUG } from '@glimmer/env';
 import { Tag } from '@glimmer/reference';
 import { ENV } from 'ember-environment';
@@ -64,7 +65,7 @@ export class Meta {
     this._descriptors = undefined;
     this._watching = undefined;
     this._mixins = undefined;
-    if (ENV._ENABLE_BINDING_SUPPORT) {
+    if (BINDING_SUPPORT && ENV._ENABLE_BINDING_SUPPORT) {
       this._bindings = undefined;
     }
     this._deps = undefined;
@@ -188,7 +189,7 @@ export class Meta {
 
   // Implements a member that provides a lazily created map of maps,
   // with inheritance at both levels.
-  writeDeps(subkey: string, itemkey: string, value: any) {
+  writeDeps(subkey: string, itemkey: string, count: number) {
     assert(
       this.isMetaDestroyed()
         ? `Cannot modify dependent keys for \`${itemkey}\` on \`${toString(
@@ -203,10 +204,10 @@ export class Meta {
     if (innerMap === undefined) {
       innerMap = outerMap[subkey] = Object.create(null);
     }
-    innerMap[itemkey] = value;
+    innerMap[itemkey] = count;
   }
 
-  peekDeps(subkey: string, itemkey: string) {
+  peekDeps(subkey: string, itemkey: string): number {
     let pointer: Meta | undefined = this;
     while (pointer !== undefined) {
       let map = pointer._deps;
@@ -221,6 +222,8 @@ export class Meta {
       }
       pointer = pointer.parent;
     }
+
+    return 0;
   }
 
   hasDeps(subkey: string) {
@@ -349,8 +352,9 @@ export class Meta {
     map[subkey] = value;
   }
 
-  peekWatching(subkey: string) {
-    return this._findInherited('_watching', subkey);
+  peekWatching(subkey: string): number {
+    let count = this._findInherited('_watching', subkey);
+    return count === undefined ? 0 : count;
   }
 
   addMixin(mixin: any) {
@@ -387,70 +391,6 @@ export class Meta {
       }
       pointer = pointer.parent;
     }
-  }
-
-  writeBindings(subkey: string, value: any) {
-    assert(
-      'Cannot invoke `meta.writeBindings` when EmberENV._ENABLE_BINDING_SUPPORT is not set',
-      ENV._ENABLE_BINDING_SUPPORT
-    );
-    assert(
-      this.isMetaDestroyed()
-        ? `Cannot add a binding for \`${subkey}\` on \`${toString(
-            this.source
-          )}\` after it has been destroyed.`
-        : '',
-      !this.isMetaDestroyed()
-    );
-
-    let map = this._getOrCreateOwnMap('_bindings');
-    map[subkey] = value;
-  }
-
-  peekBindings(subkey: string) {
-    assert(
-      'Cannot invoke `meta.peekBindings` when EmberENV._ENABLE_BINDING_SUPPORT is not set',
-      ENV._ENABLE_BINDING_SUPPORT
-    );
-    return this._findInherited('_bindings', subkey);
-  }
-
-  forEachBindings(fn: Function) {
-    assert(
-      'Cannot invoke `meta.forEachBindings` when EmberENV._ENABLE_BINDING_SUPPORT is not set',
-      ENV._ENABLE_BINDING_SUPPORT
-    );
-
-    let pointer: Meta | undefined = this;
-    let seen: { [key: string]: any } | undefined;
-    while (pointer !== undefined) {
-      let map = pointer._bindings;
-      if (map !== undefined) {
-        for (let key in map) {
-          // cleanup typing
-          seen = seen === undefined ? Object.create(null) : seen;
-          if (seen![key] === undefined) {
-            seen![key] = true;
-            fn(key, map[key]);
-          }
-        }
-      }
-      pointer = pointer.parent;
-    }
-  }
-
-  clearBindings() {
-    assert(
-      'Cannot invoke `meta.clearBindings` when EmberENV._ENABLE_BINDING_SUPPORT is not set',
-      ENV._ENABLE_BINDING_SUPPORT
-    );
-    assert(
-      this.isMetaDestroyed()
-        ? `Cannot clear bindings on \`${toString(this.source)}\` after it has been destroyed.`
-        : '',
-      !this.isMetaDestroyed()
-    );
-    this._bindings = undefined;
   }
 
   writeDescriptors(subkey: string, value: any) {
@@ -496,7 +436,12 @@ export class Meta {
     }
   }
 
-  addToListeners(eventName: string, target: object, method: Function | string, once: boolean) {
+  addToListeners(
+    eventName: string,
+    target: object | null,
+    method: Function | string,
+    once: boolean
+  ) {
     if (this._listeners === undefined) {
       this._listeners = [];
     }
@@ -582,6 +527,59 @@ export interface Meta {
   deleteFromValues(key: string): any;
   readInheritedValue(key: string, subkey: string): any;
   writeValue(obj: object, key: string, value: any): any;
+  writeBindings(subkey: string, value: any): void;
+  peekBindings(subkey: string): void;
+  forEachBindings(fn: Function): void;
+  clearBindings(): void;
+}
+
+if (BINDING_SUPPORT && ENV._ENABLE_BINDING_SUPPORT) {
+  Meta.prototype.writeBindings = function(subkey: string, value: any) {
+    assert(
+      this.isMetaDestroyed()
+        ? `Cannot add a binding for \`${subkey}\` on \`${toString(
+            this.source
+          )}\` after it has been destroyed.`
+        : '',
+      !this.isMetaDestroyed()
+    );
+
+    let map = this._getOrCreateOwnMap('_bindings');
+    map[subkey] = value;
+  };
+
+  Meta.prototype.peekBindings = function(subkey: string) {
+    return this._findInherited('_bindings', subkey);
+  };
+
+  Meta.prototype.forEachBindings = function(fn: Function) {
+    let pointer: Meta | undefined = this;
+    let seen: { [key: string]: any } | undefined;
+    while (pointer !== undefined) {
+      let map = pointer._bindings;
+      if (map !== undefined) {
+        for (let key in map) {
+          // cleanup typing
+          seen = seen === undefined ? Object.create(null) : seen;
+          if (seen![key] === undefined) {
+            seen![key] = true;
+            fn(key, map[key]);
+          }
+        }
+      }
+      pointer = pointer.parent;
+    }
+  };
+
+  Meta.prototype.clearBindings = function() {
+    assert(
+      this.isMetaDestroyed()
+        ? `Cannot clear bindings on \`${toString(this.source)}\` after it has been destroyed.`
+        : '',
+      !this.isMetaDestroyed()
+    );
+    this._bindings = undefined;
+  };
 }
 
 if (DEBUG) {
@@ -797,8 +795,13 @@ export function descriptorFor(obj: object, keyName: string, _meta?: Meta) {
   @private
 */
 export function isDescriptor(possibleDesc: any | undefined | null): boolean {
-  // TODO make this return possibleDesc is Descriptor
-  return possibleDesc !== null && typeof possibleDesc === 'object' && possibleDesc.isDescriptor;
+  // TODO make this return `possibleDesc is Descriptor`
+  return (
+    possibleDesc !== undefined &&
+    possibleDesc !== null &&
+    typeof possibleDesc === 'object' &&
+    possibleDesc.isDescriptor === true
+  );
 }
 
 export { counters };

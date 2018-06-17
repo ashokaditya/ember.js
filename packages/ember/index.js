@@ -5,6 +5,7 @@ import { IS_NODE, module } from 'node-module';
 import * as utils from 'ember-utils';
 import { Registry, Container } from 'container';
 import * as instrumentation from '@ember/instrumentation';
+import { deleteMeta, meta } from 'ember-meta';
 import * as metal from 'ember-metal';
 import { FEATURES, isEnabled } from '@ember/canary-features';
 import * as EmberDebug from '@ember/debug';
@@ -106,6 +107,7 @@ import {
   TextArea,
   isSerializationFirstNode,
 } from 'ember-glimmer';
+// eslint-disable-next-line import/no-unresolved
 import VERSION from './version';
 import * as views from 'ember-views';
 import * as routing from 'ember-routing';
@@ -121,8 +123,14 @@ import Engine from '@ember/engine';
 import EngineInstance from '@ember/engine/instance';
 import Map from '@ember/map';
 import MapWithDefault from '@ember/map/with-default';
-import OrderedSet from '@ember/map/lib/ordered-set';
+import OrderedSet, { __OrderedSet__ } from '@ember/map/lib/ordered-set';
 import { assign, merge } from '@ember/polyfills';
+import {
+  PROPERTY_WILL_CHANGE,
+  PROPERTY_DID_CHANGE,
+  LOGGER,
+  EMBER_EXTEND_PROTOTYPES,
+} from '@ember/deprecated-features';
 
 // ****ember-environment****
 
@@ -144,21 +152,23 @@ Object.defineProperty(Ember, 'lookup', {
   enumerable: false,
 });
 
-Object.defineProperty(Ember, 'EXTEND_PROTOTYPES', {
-  enumerable: false,
-  get() {
-    deprecate(
-      'Accessing Ember.EXTEND_PROTOTYPES is deprecated, please migrate to Ember.ENV.EXTEND_PROTOTYPES',
-      false,
-      {
-        id: 'ember-env.old-extend-prototypes',
-        until: '4.0.0',
-      }
-    );
+if (EMBER_EXTEND_PROTOTYPES) {
+  Object.defineProperty(Ember, 'EXTEND_PROTOTYPES', {
+    enumerable: false,
+    get() {
+      deprecate(
+        'Accessing Ember.EXTEND_PROTOTYPES is deprecated, please migrate to Ember.ENV.EXTEND_PROTOTYPES',
+        false,
+        {
+          id: 'ember-env.old-extend-prototypes',
+          until: '4.0.0',
+        }
+      );
 
-    return ENV.EXTEND_PROTOTYPES;
-  },
-});
+      return ENV.EXTEND_PROTOTYPES;
+    },
+  });
+}
 
 // ****@ember/application****
 Ember.getOwner = getOwner;
@@ -173,6 +183,7 @@ Ember.EngineInstance = EngineInstance;
 
 // ****@ember/map****
 Ember.OrderedSet = OrderedSet;
+Ember.__OrderedSet__ = __OrderedSet__;
 Ember.Map = Map;
 Ember.MapWithDefault = MapWithDefault;
 
@@ -261,7 +272,7 @@ Ember.computed = computed;
 computed.alias = metal.alias;
 Ember.ComputedProperty = metal.ComputedProperty;
 Ember.cacheFor = metal.getCachedValueFor;
-Ember.meta = metal.meta;
+Ember.meta = meta;
 Ember.get = metal.get;
 Ember.getWithDefault = metal.getWithDefault;
 Ember._getPath = metal._getPath;
@@ -278,8 +289,12 @@ Ember.isNone = metal.isNone;
 Ember.isEmpty = metal.isEmpty;
 Ember.isBlank = metal.isBlank;
 Ember.isPresent = metal.isPresent;
-Ember.propertyWillChange = metal.propertyWillChange;
-Ember.propertyDidChange = metal.propertyDidChange;
+if (PROPERTY_WILL_CHANGE) {
+  Ember.propertyWillChange = metal.propertyWillChange;
+}
+if (PROPERTY_DID_CHANGE) {
+  Ember.propertyDidChange = metal.propertyDidChange;
+}
 Ember.notifyPropertyChange = metal.notifyPropertyChange;
 Ember.overrideChains = metal.overrideChains;
 Ember.beginPropertyChanges = metal.beginPropertyChanges;
@@ -300,7 +315,7 @@ Ember.unwatchPath = metal.unwatchPath;
 Ember.watch = metal.watch;
 Ember.isWatching = metal.isWatching;
 Ember.unwatch = metal.unwatch;
-Ember.destroy = metal.deleteMeta;
+Ember.destroy = deleteMeta;
 Ember.libraries = metal.libraries;
 Ember.getProperties = metal.getProperties;
 Ember.setProperties = metal.setProperties;
@@ -350,7 +365,9 @@ Object.defineProperty(Ember, 'testing', {
 Ember._Backburner = Backburner;
 
 // ****ember-console****
-Ember.Logger = Logger;
+if (LOGGER) {
+  Ember.Logger = Logger;
+}
 
 // ****ember-runtime****
 Ember.A = A;
@@ -545,7 +562,9 @@ Object.defineProperty(Ember, 'TEMPLATES', {
 Ember.VERSION = VERSION;
 
 // ****ember-views****
-Ember.$ = views.jQuery;
+if (!views.jQueryDisabled) {
+  Ember.$ = views.jQuery;
+}
 Ember.ViewUtils = {
   isSimpleClick: views.isSimpleClick,
   getViewElement: views.getViewElement,

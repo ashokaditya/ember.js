@@ -1,3 +1,4 @@
+import { ROUTER_ROUTER } from '@ember/deprecated-features';
 import { getOwner } from 'ember-owner';
 import { assign } from '@ember/polyfills';
 import { once } from '@ember/runloop';
@@ -5,14 +6,7 @@ import { get, set, getProperties, setProperties, computed, isEmpty } from 'ember
 import { assert, deprecate, info, isTesting } from '@ember/debug';
 import { DEBUG } from '@glimmer/env';
 import { classify } from '@ember/string';
-import {
-  typeOf,
-  copy,
-  Object as EmberObject,
-  A as emberA,
-  Evented,
-  ActionHandler,
-} from 'ember-runtime';
+import { typeOf, Object as EmberObject, A as emberA, Evented, ActionHandler } from 'ember-runtime';
 import generateController from './generate_controller';
 import {
   stashParamNames,
@@ -55,7 +49,7 @@ export function hasDefaultSerialize(route) {
 
 /**
   The `Route` class is used to define individual routes. Refer to
-  the [routing guide](https://emberjs.com/guides/routing/) for documentation.
+  the [routing guide](https://guides.emberjs.com/release/routing/) for documentation.
 
   @class Route
   @extends EmberObject
@@ -110,18 +104,20 @@ let Route = EmberObject.extend(ActionHandler, Evented, {
   */
   queryParams: {},
 
-  router: computed('_router', function() {
-    deprecate(
-      'Route#router is an intimate API that has been renamed to Route#_router. However you might want to consider using the router service',
-      false,
-      {
-        id: 'ember-routing.route-router',
-        until: '3.5.0',
-        url: 'https://emberjs.com/deprecations/v3.x#toc_ember-routing-route-router',
-      }
-    );
-    return this._router;
-  }),
+  router: ROUTER_ROUTER
+    ? computed('_router', function() {
+        deprecate(
+          'Route#router is an intimate API that has been renamed to Route#_router. However you might want to consider using the router service',
+          false,
+          {
+            id: 'ember-routing.route-router',
+            until: '3.5.0',
+            url: 'https://emberjs.com/deprecations/v3.x#toc_ember-routing-route-router',
+          }
+        );
+        return this._router;
+      })
+    : undefined,
 
   /**
     The name of the route, dot-delimited.
@@ -1590,7 +1586,7 @@ let Route = EmberObject.extend(ActionHandler, Evented, {
 
     if (!name) {
       if (sawParams) {
-        return copy(params);
+        return Object.assign({}, params);
       } else {
         if (transition.resolveIndex < 1) {
           return;

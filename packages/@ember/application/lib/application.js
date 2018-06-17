@@ -9,7 +9,7 @@ import { assert, isTesting } from '@ember/debug';
 import { DEBUG } from '@glimmer/env';
 import { bind, join, once, run, schedule } from '@ember/runloop';
 import { libraries, processAllNamespaces, setNamespaceSearchDisabled } from 'ember-metal';
-import { _loaded, runLoadHooks } from '@ember/application';
+import { _loaded, runLoadHooks } from './lazy_load';
 import { RSVP } from 'ember-runtime';
 import { EventDispatcher, jQuery, jQueryDisabled } from 'ember-views';
 import {
@@ -21,7 +21,7 @@ import {
   NoneLocation,
   BucketCache,
 } from 'ember-routing';
-import ApplicationInstance from '@ember/application/instance';
+import ApplicationInstance from '../instance';
 import Engine from '@ember/engine';
 import { privatize as P } from 'container';
 import { setupApplicationRegistry } from 'ember-glimmer';
@@ -144,7 +144,7 @@ let librariesRegistered = false;
 
   To learn more about the events Ember components use, see
 
-  [components/handling-events](https://guides.emberjs.com/current/components/handling-events/#toc_event-names).
+  [components/handling-events](https://guides.emberjs.com/release/components/handling-events/#toc_event-names).
 
   ### Initializers
 
@@ -378,7 +378,7 @@ const Application = Engine.extend({
     // the Application's own `boot` method.
     this._readinessDeferrals = 1;
     this._booted = false;
-    this._applicationInstances = [];
+    this._applicationInstances = new Set();
 
     this.autoboot = this._globalsMode = !!this.autoboot;
 
@@ -412,7 +412,7 @@ const Application = Engine.extend({
     @method _watchInstance
   */
   _watchInstance(instance) {
-    this._applicationInstances.push(instance);
+    this._applicationInstances.add(instance);
   },
 
   /**
@@ -423,10 +423,7 @@ const Application = Engine.extend({
     @method _unwatchInstance
   */
   _unwatchInstance(instance) {
-    let index = this._applicationInstances.indexOf(instance);
-    if (index > -1) {
-      this._applicationInstances.splice(index, 1);
-    }
+    return this._applicationInstances.delete(instance);
   },
 
   /**
@@ -843,9 +840,9 @@ const Application = Engine.extend({
       _loaded.application = undefined;
     }
 
-    if (this._applicationInstances.length) {
+    if (this._applicationInstances.size) {
       this._applicationInstances.forEach(i => i.destroy());
-      this._applicationInstances.length = 0;
+      this._applicationInstances.clear();
     }
   },
 
@@ -915,7 +912,7 @@ const Application = Engine.extend({
       // Start the app at the special demo URL
       App.visit('/demo', options);
     });
-    ````
+    ```
 
     Or perhaps you might want to boot two instances of your app on the same
     page for a split-screen multiplayer experience:
